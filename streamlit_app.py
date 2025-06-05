@@ -27,8 +27,8 @@ import time
 import google.generativeai as genai # This is the primary SDK for Gemini
 
 # --- App Configuration & Title ---
-st.set_page_config(page_title="Gemini Study Buddy Pro (Practice Qs)", layout="wide")
-st.title("📚 Gemini Study Buddy Pro (Practice Qs)")
+st.set_page_config(page_title="YashrajAI", layout="wide")
+st.title("ULTIMATE AI Study Helper")
 
 # --- API Key Configuration ---
 try:
@@ -76,19 +76,19 @@ if 'last_used_sources' not in st.session_state:
 # SECTION 1: OCR PDF (Using Gemini Multimodal)
 # =============================================
 st.sidebar.markdown("---")
-st.sidebar.header("📄 OCR Scanned PDF (with Gemini)")
-ocr_uploaded_file = st.sidebar.file_uploader("Upload a scanned PDF for Gemini OCR", type="pdf", key="gemini_ocr_uploader")
+st.sidebar.header("📄 OCR Scanned PDF ")
+ocr_uploaded_file = st.sidebar.file_uploader("Upload a scanned PDF for OCR", type="pdf", key="gemini_ocr_uploader")
 
 def perform_ocr_with_gemini(pdf_file_uploader_object):
     try:
-        st.sidebar.write("Uploading PDF to Gemini File API...")
+        st.sidebar.write("Uploading PDF...")
         uploaded_gemini_file = genai.upload_file(
             path=pdf_file_uploader_object,
             display_name=pdf_file_uploader_object.name,
             mime_type=pdf_file_uploader_object.type
         )
-        st.sidebar.write(f"File '{uploaded_gemini_file.display_name}' uploaded. URI: {uploaded_gemini_file.uri}. Mime Type: {pdf_file_uploader_object.type}")
-        st.sidebar.write("Extracting text with Gemini 1.5 Flash...")
+#        st.sidebar.write(f"File '{uploaded_gemini_file.display_name}' uploaded. URI: {uploaded_gemini_file.uri}. Mime Type: {pdf_file_uploader_object.type}")
+        st.sidebar.write("Extracting text...")
         model_ocr = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-04-17")
         prompt = [
             "Please perform OCR on the provided PDF document and extract all text content.",
@@ -99,32 +99,32 @@ def perform_ocr_with_gemini(pdf_file_uploader_object):
         response = model_ocr.generate_content(prompt, request_options={"timeout": 600})
         try:
             genai.delete_file(uploaded_gemini_file.name)
-            st.sidebar.write(f"Temporary file '{uploaded_gemini_file.display_name}' deleted from Gemini File API.")
+            st.sidebar.write(f"Temporary file '{uploaded_gemini_file.display_name}' deleted from File API.")
         except Exception as e_delete:
-            st.sidebar.warning(f"Could not delete temporary file from Gemini File API: {e_delete}")
+            st.sidebar.warning(f"Could not delete temporary file from File API: {e_delete}")
         return response.text
     except Exception as e:
-        st.sidebar.error(f"Gemini OCR Error: {e}")
+        st.sidebar.error(f"OCR Error: {e}")
         if 'uploaded_gemini_file' in locals() and hasattr(uploaded_gemini_file, 'name'):
             try: genai.delete_file(uploaded_gemini_file.name)
             except: pass
         return None
 
 if ocr_uploaded_file is not None:
-    if st.sidebar.button("✨ Perform Gemini OCR", key="gemini_ocr_button"):
+    if st.sidebar.button("✨ Perform OCR", key="gemini_ocr_button"):
         st.session_state.ocr_text_output = None 
         st.session_state.ocr_file_name = None
-        with st.spinner("Performing OCR with Gemini... This may take a while for large files."):
+        with st.spinner("Performing OCR... This may take a while for large files."):
             extracted_text = perform_ocr_with_gemini(ocr_uploaded_file)
             if extracted_text:
                 st.session_state.ocr_text_output = extracted_text
-                st.session_state.ocr_file_name = f"gemini_ocr_output_{os.path.splitext(ocr_uploaded_file.name)[0]}.txt"
-                st.sidebar.success("Gemini OCR Complete!")
+                st.session_state.ocr_file_name = f"ocr_output_{os.path.splitext(ocr_uploaded_file.name)[0]}.txt"
+                st.sidebar.success("OCR Complete!")
             else:
-                st.sidebar.error("Gemini OCR failed or no text was extracted.")
+                st.sidebar.error("OCR failed or no text was extracted.")
 
 if st.session_state.ocr_text_output:
-    st.sidebar.subheader("Gemini OCR Result:")
+    st.sidebar.subheader("OCR Result:")
     st.sidebar.download_button(
         label="📥 Download OCR'd Text",
         data=st.session_state.ocr_text_output.encode('utf-8'),
@@ -132,7 +132,7 @@ if st.session_state.ocr_text_output:
         mime="text/plain",
         key="download_gemini_ocr"
     )
-    with st.sidebar.expander("Preview Gemini OCR Text (First 1000 Chars)"):
+    with st.sidebar.expander("Preview OCR Text (First 1000 Chars)"):
         st.text(st.session_state.ocr_text_output[:1000] + "...")
 
 
@@ -153,7 +153,7 @@ if study_uploaded_file is not None and GEMINI_API_KEY and llm_studybuddy and emb
     current_file_hash = hashlib.md5(file_bytes).hexdigest()
 
     if current_file_hash != st.session_state.processed_file_hash:
-        st.sidebar.info(f"New file '{study_uploaded_file.name}' for Study Buddy. Processing...")
+        st.sidebar.info(f"New file '{study_uploaded_file.name}' for AI. Processing...")
         st.session_state.vector_store = None
         st.session_state.documents_for_direct_use = None
         st.session_state.chat_history = [] 
@@ -169,7 +169,7 @@ if study_uploaded_file is not None and GEMINI_API_KEY and llm_studybuddy and emb
                 loader = TextLoader(tmp_file_path, encoding='utf-8')
             documents = loader.load()
             if study_uploaded_file.type == "application/pdf" and (not documents or not any(doc.page_content.strip() for doc in documents)):
-                st.sidebar.error("Uploaded PDF for Study Buddy has no extractable text. Use OCR section first for scanned PDFs.")
+                st.sidebar.error("Uploaded PDF for AI has no extractable text. Use OCR section first for scanned PDFs.")
                 os.remove(tmp_file_path)
                 st.session_state.processed_file_hash = None
             else:
@@ -178,16 +178,16 @@ if study_uploaded_file is not None and GEMINI_API_KEY and llm_studybuddy and emb
                 texts = text_splitter.split_documents(documents)
                 valid_texts = [text for text in texts if text.page_content and text.page_content.strip()]
                 if not valid_texts:
-                    st.sidebar.error("No valid text chunks after splitting for Study Buddy.")
+                    st.sidebar.error("No valid text chunks after splitting for AI.")
                 else:
-                    with st.spinner("Creating embeddings for Study Buddy..."):
+                    with st.spinner("Creating embeddings for AI..."):
                         st.session_state.vector_store = Chroma.from_documents(documents=valid_texts, embedding=embeddings_studybuddy)
                     st.session_state.processed_file_hash = current_file_hash
-                    st.sidebar.success(f"✅ '{study_uploaded_file.name}' ready for Study Buddy!")
+                    st.sidebar.success(f"✅ '{study_uploaded_file.name}' ready for AI!")
             if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
                 os.remove(tmp_file_path)
         except Exception as e:
-            st.sidebar.error(f"Error processing Study Buddy file: {e}")
+            st.sidebar.error(f"Error processing file: {e}")
             if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
             st.session_state.vector_store = None
             st.session_state.documents_for_direct_use = None
@@ -350,7 +350,7 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
                     st.rerun()
 
                 except Exception as e:
-                    error_message = f"Error getting answer from Gemini: {e}"
+                    error_message = f"Error getting answer from AI: {e}"
                     st.error(error_message)
                     st.session_state.chat_history.append({"role": "ai", "content": f"Sorry, an error occurred: {e}", "sources": None})
                     st.rerun() 
@@ -457,9 +457,9 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
             )
 
 elif not GEMINI_API_KEY:
-    st.warning("Gemini features are disabled as the Gemini API Key is not provided.")
+    st.warning("Features are disabled as the API Key is not provided.")
 else:
-    st.info("👋 Upload a text-readable document in the sidebar to use the Study Buddy tools. For scanned PDFs, use the OCR section first.")
+    st.info("👋 Upload a text-readable document in the sidebar to use the AI tools. For scanned PDFs, use the OCR section first.")
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Powered by Streamlit, LangChain & Google Gemini")
+st.sidebar.caption("Created by Yashraj")
