@@ -1,3 +1,13 @@
+import sys
+if sys.platform == 'linux': # Apply only on Linux where Streamlit Cloud runs
+    try:
+        __import__('pysqlite3')
+        import sqlite3
+        sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+        # st.toast("Successfully patched sqlite3 with pysqlite3 for ChromaDB!", icon="✅") # Optional: for debugging
+    except ImportError:
+        # st.toast("pysqlite3 not found, ChromaDB might use system SQLite.", icon="⚠️") # Optional: for debugging
+        pass
 import streamlit as st
 # LangChain imports for the Study Buddy section
 from langchain_google_genai import GoogleGenerativeAI as LangChainGoogleGenerativeAI # Alias for clarity
