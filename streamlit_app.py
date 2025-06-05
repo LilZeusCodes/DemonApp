@@ -210,7 +210,7 @@ Instructions:
 4.  The generated questions should be similar in nature to the provided examples.
 5.  For each question you generate, provide an answer based *strictly* on the information within the "Document Text".
 6.  Output Format:
-    *   Each question-answer pair must be on a new line.
+    *   Each question-answer pair must be on a new line and also leave a line after each question.
     *   Separate the question from its answer using ">>" (two greater-than signs with no spaces around them).
     *   The entire output should be formatted in Markdown.
     *   Do NOT number the questions.
