@@ -17,8 +17,8 @@ import json # For validating/parsing JSON output from LLM
 import google.generativeai as genai
 
 # --- App Configuration & Title ---
-st.set_page_config(page_title="Gemini Study Buddy Pro (Mindmap)", layout="wide")
-st.title("📚 Gemini Study Buddy Pro (Mindmap)")
+st.set_page_config(page_title="ULTIMATE Study AI", layout="wide")
+st.title("📚 YashrajAI")
 
 # --- API Key Configuration ---
 try:
@@ -27,21 +27,23 @@ except (FileNotFoundError, KeyError):
     GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY_GEMINI")
 
 if not GEMINI_API_KEY:
-    st.error("🔴 Gemini API Key (GOOGLE_API_KEY_GEMINI) not found. Please set it. All features will be disabled.")
+    st.error("🔴 API Key (GOOGLE_API_KEY_GEMINI) not found. Please set it. All features will be disabled.")
     st.stop()
 
 genai.configure(api_key=GEMINI_API_KEY)
 
 # --- Initialize LLM and Embeddings ---
 llm_studybuddy = None
+llm_studybuddy2 = None
 llm_qna = None
 embeddings_studybuddy = None
 try:
-    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.3, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
-    llm_qna = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.7, google_api_key=GEMINI_API_KEY)
+    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-2.5-flash-preview-04-17", temperature=0.6, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
+    llm_studybuddy2 = LangChainGoogleGenerativeAI(model="gemini-2.5-flash-preview-04-17", temperature=1, google_api_key=GEMINI_API_KEY) 
+    llm_qna = LangChainGoogleGenerativeAI(model="gemini-2.5-flash-preview-04-17", temperature=0.7, google_api_key=GEMINI_API_KEY)
     embeddings_studybuddy = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", task_type="retrieval_document", google_api_key=GEMINI_API_KEY)
 except Exception as e:
-    st.sidebar.error(f"Error initializing Gemini models: {e}")
+    st.sidebar.error(f"Error initializing AI models: {e}")
 
 # --- Session State Management ---
 # ... (all existing session state variables remain the same) ...
@@ -73,20 +75,20 @@ if 'mindmap_json_canvas' not in st.session_state:
 # =============================================
 # ... (OCR section remains the same) ...
 st.sidebar.markdown("---")
-st.sidebar.header("📄 OCR Scanned PDF (with Gemini)")
-ocr_uploaded_file = st.sidebar.file_uploader("Upload a scanned PDF for Gemini OCR", type="pdf", key="gemini_ocr_uploader")
+st.sidebar.header("📄 OCR Scanned PDF")
+ocr_uploaded_file = st.sidebar.file_uploader("Upload a scanned PDF for OCR", type="pdf", key="gemini_ocr_uploader")
 
 def perform_ocr_with_gemini(pdf_file_uploader_object):
     try:
-        st.sidebar.write("Uploading PDF to Gemini File API...")
+        st.sidebar.write("Uploading PDF to API...")
         uploaded_gemini_file = genai.upload_file(
             path=pdf_file_uploader_object,
             display_name=pdf_file_uploader_object.name,
             mime_type=pdf_file_uploader_object.type
         )
         st.sidebar.write(f"File '{uploaded_gemini_file.display_name}' uploaded. URI: {uploaded_gemini_file.uri}. Mime Type: {pdf_file_uploader_object.type}")
-        st.sidebar.write("Extracting text with Gemini 1.5 Flash...")
-        model_ocr = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
+        st.sidebar.write("Extracting text with AI...")
+        model_ocr = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-04-17")
         prompt = [
             "Please perform OCR on the provided PDF document and extract all text content.",
             "Present the extracted text clearly. If there are multiple pages, try to indicate page breaks with something like '--- Page X ---' if possible, or just provide the continuous text.",
@@ -96,32 +98,32 @@ def perform_ocr_with_gemini(pdf_file_uploader_object):
         response = model_ocr.generate_content(prompt, request_options={"timeout": 600})
         try:
             genai.delete_file(uploaded_gemini_file.name)
-            st.sidebar.write(f"Temporary file '{uploaded_gemini_file.display_name}' deleted from Gemini File API.")
+            st.sidebar.write(f"Temporary file '{uploaded_gemini_file.display_name}' deleted from API.")
         except Exception as e_delete:
-            st.sidebar.warning(f"Could not delete temporary file from Gemini File API: {e_delete}")
+            st.sidebar.warning(f"Could not delete temporary file from API: {e_delete}")
         return response.text
     except Exception as e:
-        st.sidebar.error(f"Gemini OCR Error: {e}")
+        st.sidebar.error(f"OCR Error: {e}")
         if 'uploaded_gemini_file' in locals() and hasattr(uploaded_gemini_file, 'name'):
             try: genai.delete_file(uploaded_gemini_file.name)
             except: pass
         return None
 
 if ocr_uploaded_file is not None:
-    if st.sidebar.button("✨ Perform Gemini OCR", key="gemini_ocr_button"):
+    if st.sidebar.button("✨ Perform OCR", key="gemini_ocr_button"):
         st.session_state.ocr_text_output = None 
         st.session_state.ocr_file_name = None
-        with st.spinner("Performing OCR with Gemini... This may take a while for large files."):
+        with st.spinner("Performing OCR with AI... This may take a while for large files."):
             extracted_text = perform_ocr_with_gemini(ocr_uploaded_file)
             if extracted_text:
                 st.session_state.ocr_text_output = extracted_text
-                st.session_state.ocr_file_name = f"gemini_ocr_output_{os.path.splitext(ocr_uploaded_file.name)[0]}.txt"
-                st.sidebar.success("Gemini OCR Complete!")
+                st.session_state.ocr_file_name = f"ocr_of_{os.path.splitext(ocr_uploaded_file.name)[0]}.txt"
+                st.sidebar.success("OCR Complete!")
             else:
-                st.sidebar.error("Gemini OCR failed or no text was extracted.")
+                st.sidebar.error("OCR failed or no text was extracted.")
 
 if st.session_state.ocr_text_output:
-    st.sidebar.subheader("Gemini OCR Result:")
+    st.sidebar.subheader("OCR Result:")
     st.sidebar.download_button(
         label="📥 Download OCR'd Text",
         data=st.session_state.ocr_text_output.encode('utf-8'),
@@ -129,7 +131,7 @@ if st.session_state.ocr_text_output:
         mime="text/plain",
         key="download_gemini_ocr"
     )
-    with st.sidebar.expander("Preview Gemini OCR Text (First 1000 Chars)"):
+    with st.sidebar.expander("Preview OCR Text (First 1000 Chars)"):
         st.text(st.session_state.ocr_text_output[:1000] + "...")
 
 # =============================================
@@ -137,7 +139,7 @@ if st.session_state.ocr_text_output:
 # =============================================
 # ... (File upload and processing logic remains the same) ...
 st.sidebar.markdown("---")
-st.sidebar.header("🧠 Study Buddy Tools")
+st.sidebar.header("🧠 Study AI Tools")
 study_uploaded_file = st.sidebar.file_uploader(
     "Upload TEXT-READABLE PDF or TXT for Q&A, Summary, etc.", 
     type=["pdf", "txt"], 
@@ -150,7 +152,7 @@ if study_uploaded_file is not None and GEMINI_API_KEY and llm_studybuddy and emb
     current_file_hash = hashlib.md5(file_bytes).hexdigest()
 
     if current_file_hash != st.session_state.processed_file_hash:
-        st.sidebar.info(f"New file '{study_uploaded_file.name}' for Study Buddy. Processing...")
+        st.sidebar.info(f"New file '{study_uploaded_file.name}' for Study AI. Processing...")
         st.session_state.vector_store = None
         st.session_state.documents_for_direct_use = None
         st.session_state.chat_history = [] 
@@ -168,7 +170,7 @@ if study_uploaded_file is not None and GEMINI_API_KEY and llm_studybuddy and emb
                 loader = TextLoader(tmp_file_path, encoding='utf-8')
             documents = loader.load()
             if study_uploaded_file.type == "application/pdf" and (not documents or not any(doc.page_content.strip() for doc in documents)):
-                st.sidebar.error("Uploaded PDF for Study Buddy has no extractable text. Use OCR section first for scanned PDFs.")
+                st.sidebar.error("Uploaded PDF for Study AI has no extractable text. Use OCR section first for scanned PDFs.")
                 os.remove(tmp_file_path)
                 st.session_state.processed_file_hash = None
             else:
@@ -179,14 +181,14 @@ if study_uploaded_file is not None and GEMINI_API_KEY and llm_studybuddy and emb
                 if not valid_texts:
                     st.sidebar.error("No valid text chunks after splitting for Study Buddy.")
                 else:
-                    with st.spinner("Creating embeddings for Study Buddy..."):
+                    with st.spinner("Creating embeddings for Study AI..."):
                         st.session_state.vector_store = Chroma.from_documents(documents=valid_texts, embedding=embeddings_studybuddy)
                     st.session_state.processed_file_hash = current_file_hash
-                    st.sidebar.success(f"✅ '{study_uploaded_file.name}' ready for Study Buddy!")
+                    st.sidebar.success(f"✅ '{study_uploaded_file.name}' ready for Study AI!")
             if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
                 os.remove(tmp_file_path)
         except Exception as e:
-            st.sidebar.error(f"Error processing Study Buddy file: {e}")
+            st.sidebar.error(f"Error processing Study AI file: {e}")
             if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
             st.session_state.vector_store = None
             st.session_state.documents_for_direct_use = None
@@ -208,8 +210,8 @@ Instructions:
 4.  The generated questions should be similar in nature to the provided examples.
 5.  For each question you generate, provide an answer based *strictly* on the information within the "Document Text".
 6.  Output Format:
-    *   Each question-answer pair must be on a new line.
-    *   Separate the question from its answer using ">>" (two greater-than signs with no spaces around them).
+    *   Each question-answer pair must be on a new line and leave a line between two pairs.
+    *   Separate the question from its answer using ONLY ">>" (two greater-than signs with no spaces around them).
     *   The entire output should be formatted in Markdown.
     *   Do NOT number the questions.
 Example Questions and Answers for {subject_name} (Follow this style):
@@ -330,14 +332,14 @@ def extract_keywords_for_mindmap(document_text, llm):
 def generate_json_canvas_from_keywords(central_topic, keywords, llm, example_canvas_json_str):
     """Generates JSON Canvas from keywords, guided by an example structure."""
     # Create a simplified list of keywords for the prompt to keep it manageable
-    keyword_list_for_prompt = "- " + "\n- ".join(keywords[:10]) # Use up to 10 keywords for canvas generation
+    keyword_list_for_prompt = "- " + "\n- ".join(keywords) # Use up to 10 keywords for canvas generation
 
     prompt = f"""
     You are an AI assistant that helps create mind maps in JSON Canvas format.
     Your task is to take a Central Topic and a list of Related Keywords and structure them into a valid JSON Canvas object containing 'nodes' and 'edges'.
 
     **Instructions for JSON Canvas Output:**
-    1.  The root of the output MUST be a single JSON object.
+    1.  The mindmap should be interconnected with small explanations of relationships between the connected keywords. the mindmap should resemble how neurons are connected in the brain. Group related and unconnected nodes into a list
     2.  This JSON object MUST contain two top-level keys: "nodes" (an array of node objects) and "edges" (an array of edge objects).
     3.  **Nodes:**
         *   Each node object must have:
@@ -354,7 +356,7 @@ def generate_json_canvas_from_keywords(central_topic, keywords, llm, example_can
             *   `"toNode"`: The `id` of the ending node (usually the central topic if connecting keywords to it, or another keyword).
             *   `"label"` (optional): A short string describing the relationship (e.g., "relates to", "is part of", "leads to"). If unsure, omit or use a generic label.
         *   Ensure all keywords are connected to the central topic, or form a logical structure.
-
+    5.  Use EVERY SINGLE keyword provided in the Related Keywords list.
     **Example of the desired JSON Canvas structure (DO NOT just copy this, adapt it based on the provided keywords):**
     ```json
     {example_canvas_json_str}
@@ -497,7 +499,7 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
                     st.rerun()
 
                 except Exception as e:
-                    error_message = f"Error getting answer from Gemini: {e}"
+                    error_message = f"Error getting answer from AI: {e}"
                     st.error(error_message)
                     st.session_state.chat_history.append({"role": "ai", "content": f"Sorry, an error occurred: {e}", "sources": None})
                     st.rerun() 
@@ -579,19 +581,28 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
                         # Provide the example JSON canvas string directly in the call
                         example_canvas_str = """
                         {
-                            "nodes": [
-                                {"id":"example_center","x":0,"y":0,"width":250,"height":60,"type":"text","text":"Example Central Topic"},
-                                {"id":"example_key1","x":-200,"y":-100,"width":200,"height":50,"type":"text","text":"Example Keyword 1"}
-                            ],
-                            "edges": [
-                                {"id":"example_edge1","fromNode":"example_key1","toNode":"example_center","label":"relates to"}
-                            ]
-                        }
-                        """
+                        "nodes": [
+                        {"id":"node_photosynthesis_center","x":-50,"y":-150,"width":280,"height":60,"type":"text","text":"Photosynthesis (Central Topic)"},
+                        {"id":"node_sunlight","x":-350,"y":-300,"width":200,"height":50,"type":"text","text":"Sunlight (Input)"},
+                        {"id":"node_water","x":-350,"y":-50,"width":200,"height":50,"type":"text","text":"Water (Input)"},
+                        {"id":"node_co2","x":250,"y":-300,"width":250,"height":50,"type":"text","text":"Carbon Dioxide (Input)"},
+                        {"id":"node_chlorophyll","x":-50,"y":-20,"width":250,"height":50,"type":"text","text":"Chlorophyll (Catalyst/Location)"},
+                        {"id":"node_glucose","x":-350,"y":100,"width":200,"height":50,"type":"text","text":"Glucose (Output)"},
+                        {"id":"node_oxygen","x":250,"y":100,"width":200,"height":50,"type":"text","text":"Oxygen (Output)"}
+                        ],
+                        "edges": [
+                        {"id":"edge_sun_photo","fromNode":"node_sunlight","toNode":"node_photosynthesis_center","label":"is required for"},
+                        {"id":"edge_water_photo","fromNode":"node_water","toNode":"node_photosynthesis_center","label":"is required for"},
+                        {"id":"edge_co2_photo","fromNode":"node_co2","toNode":"node_photosynthesis_center","label":"is required for"},
+                        {"id":"edge_chloro_photo","fromNode":"node_chlorophyll","toNode":"node_photosynthesis_center","label":"is site of / uses"},
+                        {"id":"edge_photo_glucose","fromNode":"node_photosynthesis_center","toNode":"node_glucose","label":"produces"},
+                        {"id":"edge_photo_oxygen","fromNode":"node_photosynthesis_center","toNode":"node_oxygen","label":"produces"}
+                        ]
+                        }                        """
                         json_canvas_output = generate_json_canvas_from_keywords(
                             central_topic=central_topic,
                             keywords=keywords,
-                            llm=llm_studybuddy, # Use LLM with lower temperature
+                            llm=llm_studybuddy2, # Use LLM with Higher temperature
                             example_canvas_json_str=example_canvas_str
                         )
                         st.session_state.mindmap_json_canvas = json_canvas_output
@@ -644,8 +655,12 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
                 all_doc_text = "\n".join([doc.page_content for doc in st.session_state.documents_for_direct_use])
                 context_limit_flashcards = 300000 
                 prompt_template_flashcards = f"""
-                Based ONLY on the following text, identify key terms and their definitions.
-                Format each as 'Term>>Definition'. Each flashcard should be on a new line.
+                Based ONLY on the following text, identify key words and their meanings.
+                Format each as 'Word>>Meaning'. Each flashcard should be on a new line.
+                Examples:
+                - 'Photosynthesis>>The process by which green plants use sunlight to synthesize foods with the help of chlorophyll.'
+                - 'Mitosis>>A type of cell division that results in two daughter cells each having the same number and kind of chromosomes as the parent nucleus.'
+                - 'Oblivious>>Unaware or unconcerned about what is happening around one.'
                 Text:
                 ---
                 {all_doc_text[:context_limit_flashcards]}
@@ -721,9 +736,9 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
 
 
 elif not GEMINI_API_KEY:
-    st.warning("Gemini features are disabled as the Gemini API Key is not provided.")
+    st.warning("AI features are disabled as the API Key is not provided.")
 else:
-    st.info("👋 Upload a text-readable document in the sidebar to use the Study Buddy tools. For scanned PDFs, use the OCR section first.")
+    st.info("👋 Upload a text-readable document in the sidebar to use the Study AI tools. For scanned PDFs, use the OCR section first.")
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Powered by Streamlit, LangChain & Google Gemini")
+st.sidebar.caption("Created by Yashraj.")
