@@ -1,3 +1,221 @@
+import streamlit as st
+# LangChain imports for the Study Buddy section
+from langchain_google_genai import GoogleGenerativeAI as LangChainGoogleGenerativeAI
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Chroma
+from langchain.prompts import PromptTemplate
+# Standard Python imports
+import os
+import tempfile
+import hashlib
+import time
+import json # For validating/parsing JSON output from LLM
+
+# --- OCR Specific Imports (using Gemini directly) ---
+import google.generativeai as genai
+
+# --- App Configuration & Title ---
+st.set_page_config(page_title="Gemini Study Buddy Pro (Mindmap)", layout="wide")
+st.title("📚 Gemini Study Buddy Pro (Mindmap)")
+
+# --- API Key Configuration ---
+try:
+    GEMINI_API_KEY = st.secrets.get("GOOGLE_API_KEY_GEMINI", os.getenv("GOOGLE_API_KEY_GEMINI"))
+except (FileNotFoundError, KeyError):
+    GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY_GEMINI")
+
+if not GEMINI_API_KEY:
+    st.error("🔴 Gemini API Key (GOOGLE_API_KEY_GEMINI) not found. Please set it. All features will be disabled.")
+    st.stop()
+
+genai.configure(api_key=GEMINI_API_KEY)
+
+# --- Initialize LLM and Embeddings ---
+llm_studybuddy = None
+llm_qna = None
+embeddings_studybuddy = None
+try:
+    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.3, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
+    llm_qna = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.7, google_api_key=GEMINI_API_KEY)
+    embeddings_studybuddy = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", task_type="retrieval_document", google_api_key=GEMINI_API_KEY)
+except Exception as e:
+    st.sidebar.error(f"Error initializing Gemini models: {e}")
+
+# --- Session State Management ---
+# ... (all existing session state variables remain the same) ...
+if 'ocr_text_output' not in st.session_state:
+    st.session_state.ocr_text_output = None
+if 'ocr_file_name' not in st.session_state:
+    st.session_state.ocr_file_name = None
+if 'vector_store' not in st.session_state:
+    st.session_state.vector_store = None
+if 'processed_file_hash' not in st.session_state:
+    st.session_state.processed_file_hash = None
+if 'documents_for_direct_use' not in st.session_state:
+    st.session_state.documents_for_direct_use = None
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+if 'current_doc_chat_hash' not in st.session_state:
+    st.session_state.current_doc_chat_hash = None
+if 'last_used_sources' not in st.session_state: 
+    st.session_state.last_used_sources = []
+# --- NEW: For Mindmap ---
+if 'mindmap_keywords_list' not in st.session_state:
+    st.session_state.mindmap_keywords_list = ""
+if 'mindmap_json_canvas' not in st.session_state:
+    st.session_state.mindmap_json_canvas = ""
+
+
+# =============================================
+# SECTION 1: OCR PDF (Using Gemini Multimodal)
+# =============================================
+# ... (OCR section remains the same) ...
+st.sidebar.markdown("---")
+st.sidebar.header("📄 OCR Scanned PDF (with Gemini)")
+ocr_uploaded_file = st.sidebar.file_uploader("Upload a scanned PDF for Gemini OCR", type="pdf", key="gemini_ocr_uploader")
+
+def perform_ocr_with_gemini(pdf_file_uploader_object):
+    try:
+        st.sidebar.write("Uploading PDF to Gemini File API...")
+        uploaded_gemini_file = genai.upload_file(
+            path=pdf_file_uploader_object,
+            display_name=pdf_file_uploader_object.name,
+            mime_type=pdf_file_uploader_object.type
+        )
+        st.sidebar.write(f"File '{uploaded_gemini_file.display_name}' uploaded. URI: {uploaded_gemini_file.uri}. Mime Type: {pdf_file_uploader_object.type}")
+        st.sidebar.write("Extracting text with Gemini 1.5 Flash...")
+        model_ocr = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
+        prompt = [
+            "Please perform OCR on the provided PDF document and extract all text content.",
+            "Present the extracted text clearly. If there are multiple pages, try to indicate page breaks with something like '--- Page X ---' if possible, or just provide the continuous text.",
+            "Focus solely on extracting the text as accurately as possible from the document.",
+            uploaded_gemini_file 
+        ]
+        response = model_ocr.generate_content(prompt, request_options={"timeout": 600})
+        try:
+            genai.delete_file(uploaded_gemini_file.name)
+            st.sidebar.write(f"Temporary file '{uploaded_gemini_file.display_name}' deleted from Gemini File API.")
+        except Exception as e_delete:
+            st.sidebar.warning(f"Could not delete temporary file from Gemini File API: {e_delete}")
+        return response.text
+    except Exception as e:
+        st.sidebar.error(f"Gemini OCR Error: {e}")
+        if 'uploaded_gemini_file' in locals() and hasattr(uploaded_gemini_file, 'name'):
+            try: genai.delete_file(uploaded_gemini_file.name)
+            except: pass
+        return None
+
+if ocr_uploaded_file is not None:
+    if st.sidebar.button("✨ Perform Gemini OCR", key="gemini_ocr_button"):
+        st.session_state.ocr_text_output = None 
+        st.session_state.ocr_file_name = None
+        with st.spinner("Performing OCR with Gemini... This may take a while for large files."):
+            extracted_text = perform_ocr_with_gemini(ocr_uploaded_file)
+            if extracted_text:
+                st.session_state.ocr_text_output = extracted_text
+                st.session_state.ocr_file_name = f"gemini_ocr_output_{os.path.splitext(ocr_uploaded_file.name)[0]}.txt"
+                st.sidebar.success("Gemini OCR Complete!")
+            else:
+                st.sidebar.error("Gemini OCR failed or no text was extracted.")
+
+if st.session_state.ocr_text_output:
+    st.sidebar.subheader("Gemini OCR Result:")
+    st.sidebar.download_button(
+        label="📥 Download OCR'd Text",
+        data=st.session_state.ocr_text_output.encode('utf-8'),
+        file_name=st.session_state.ocr_file_name,
+        mime="text/plain",
+        key="download_gemini_ocr"
+    )
+    with st.sidebar.expander("Preview Gemini OCR Text (First 1000 Chars)"):
+        st.text(st.session_state.ocr_text_output[:1000] + "...")
+
+# =============================================
+# SECTION 2: Study Buddy Q&A and Tools
+# =============================================
+# ... (File upload and processing logic remains the same) ...
+st.sidebar.markdown("---")
+st.sidebar.header("🧠 Study Buddy Tools")
+study_uploaded_file = st.sidebar.file_uploader(
+    "Upload TEXT-READABLE PDF or TXT for Q&A, Summary, etc.", 
+    type=["pdf", "txt"], 
+    key="study_uploader",
+    help="If your PDF is scanned, please use the 'OCR Scanned PDF' section above first and then upload the downloaded .txt file here."
+)
+
+if study_uploaded_file is not None and GEMINI_API_KEY and llm_studybuddy and embeddings_studybuddy:
+    file_bytes = study_uploaded_file.getvalue()
+    current_file_hash = hashlib.md5(file_bytes).hexdigest()
+
+    if current_file_hash != st.session_state.processed_file_hash:
+        st.sidebar.info(f"New file '{study_uploaded_file.name}' for Study Buddy. Processing...")
+        st.session_state.vector_store = None
+        st.session_state.documents_for_direct_use = None
+        st.session_state.chat_history = [] 
+        st.session_state.current_doc_chat_hash = current_file_hash 
+        st.session_state.last_used_sources = []
+        st.session_state.mindmap_keywords_list = "" # Reset mindmap data for new file
+        st.session_state.mindmap_json_canvas = ""
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{study_uploaded_file.name.split('.')[-1]}") as tmp_file:
+                tmp_file.write(file_bytes)
+                tmp_file_path = tmp_file.name
+            if study_uploaded_file.type == "application/pdf":
+                loader = PyPDFLoader(tmp_file_path)
+            else:
+                loader = TextLoader(tmp_file_path, encoding='utf-8')
+            documents = loader.load()
+            if study_uploaded_file.type == "application/pdf" and (not documents or not any(doc.page_content.strip() for doc in documents)):
+                st.sidebar.error("Uploaded PDF for Study Buddy has no extractable text. Use OCR section first for scanned PDFs.")
+                os.remove(tmp_file_path)
+                st.session_state.processed_file_hash = None
+            else:
+                st.session_state.documents_for_direct_use = documents
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
+                texts = text_splitter.split_documents(documents)
+                valid_texts = [text for text in texts if text.page_content and text.page_content.strip()]
+                if not valid_texts:
+                    st.sidebar.error("No valid text chunks after splitting for Study Buddy.")
+                else:
+                    with st.spinner("Creating embeddings for Study Buddy..."):
+                        st.session_state.vector_store = Chroma.from_documents(documents=valid_texts, embedding=embeddings_studybuddy)
+                    st.session_state.processed_file_hash = current_file_hash
+                    st.sidebar.success(f"✅ '{study_uploaded_file.name}' ready for Study Buddy!")
+            if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
+                os.remove(tmp_file_path)
+        except Exception as e:
+            st.sidebar.error(f"Error processing Study Buddy file: {e}")
+            if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
+            st.session_state.vector_store = None
+            st.session_state.documents_for_direct_use = None
+            st.session_state.processed_file_hash = None
+            st.session_state.chat_history = []
+            st.session_state.current_doc_chat_hash = None
+            st.session_state.last_used_sources = []
+            st.session_state.mindmap_keywords_list = ""
+            st.session_state.mindmap_json_canvas = ""
+
+# --- Backend Function for Practice Question Generation ---
+# ... (generate_practice_questions_with_guidance function remains the same) ...
+def generate_practice_questions_with_guidance(subject_name, document_text, example_qa_style_guide, llm):
+    PRACTICE_QUESTION_PROMPT_TEMPLATE = """You are an expert AI assistant tasked with generating practice questions for a {subject_name} exam, based ONLY on the provided "Document Text". Your goal is to emulate the style, type, and difficulty of the "Example Questions and Answers" provided for style guidance.
+Instructions:
+1.  Carefully review the "Document Text".
+2.  Carefully review the "Example Questions and Answers" to understand the desired style, question types, and answer format for {subject_name}.
+3.  Generate as many new and distinct practice questions based on the "Document Text" as you can.
+4.  The generated questions should be similar in nature to the provided examples.
+5.  For each question you generate, provide an answer based *strictly* on the information within the "Document Text".
+6.  Output Format:
+    *   Each question-answer pair must be on a new line.
+    *   Separate the question from its answer using ">>" (two greater-than signs with no spaces around them).
+    *   The entire output should be formatted in Markdown.
+    *   Do NOT number the questions.
+Example Questions and Answers for {subject_name} (Follow this style):
+{example_questions_and_answers}
+Document Text:
+{document_text}
 Generated Practice Questions for {subject_name} (question>>answer format):
 """
     formatted_prompt = PRACTICE_QUESTION_PROMPT_TEMPLATE.format(
