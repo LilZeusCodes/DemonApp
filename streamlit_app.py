@@ -49,7 +49,7 @@ llm_studybuddy2 = None
 llm_qna = None
 embeddings_studybuddy = None
 try:
-    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.6, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
+    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.7, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
     llm_studybuddy2 = LangChainGoogleGenerativeAI(model="gemini-2.5-pro", temperature=1, google_api_key=GEMINI_API_KEY) 
     llm_qna = LangChainGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.7, google_api_key=GEMINI_API_KEY)
     embeddings_studybuddy = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", task_type="retrieval_document", google_api_key=GEMINI_API_KEY)
@@ -250,16 +250,16 @@ Generated Practice Questions for {subject_name} (question>>answer format):
 def generate_custom_explanation(document_text, explanation_style, llm):
     common_instructions = """
     Your goal is to explain the core concepts from the provided "Document Text" in an engaging way.
-    Ensure all major concepts from the text are covered.
+    Ensure ALL concepts from the text are covered.
     Use vivid metaphors and analogies to aid understanding.
-    The explanation should be formatted in Markdown.
+    The explanation should be detailed and formatted in Markdown.
     Base your explanation SOLELY on the provided "Document Text".
     """
     style_specific_prompts = {
         "brainrot": f""" {common_instructions}
             Role: You are a super-online Gen Z tutor who explains things with maximum "brainrot" and internet slang, but still makes it make sense.
             Style:
-            - Keep it relatively short, like a quick, punchy explainer.
+            - Keep it relatively short, like a quick, punchy explainer but cover all major concepts.
             - Use current Gen Z slang, internet memes, and "brainrot" terminology (e.g., "rizz", "no cap", "it's giving...", "sus", "delulu", "based", "sigma", "gyatt" if contextually (and hilariously inappropriately) relevant, "skibidi", "fanum tax" – use these creatively and where they might (absurdly) fit an analogy).
             - Make the metaphors and analogies extremely online and relatable to internet culture.
             - It should be funny, a bit unhinged, but ultimately help someone "get" the concepts through the absurdity.
@@ -273,7 +273,7 @@ def generate_custom_explanation(document_text, explanation_style, llm):
         "normal": f""" {common_instructions}
             Role: You are a clear and patient educator.
             Style:
-            - The explanation should be comprehensive but concise, longer than a "short summary" but shorter than a "detailed summary".
+            - The explanation should be comprehensive but concise, it should cover all major concepts in an easily digestable format.
             - Use clear, easy-to-understand language.
             - Employ insightful metaphors and analogies to clarify complex points.
             - Maintain a helpful and encouraging tone.
@@ -557,7 +557,7 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
                     explanation_text = generate_custom_explanation(
                         document_text=document_context_for_explanation,
                         explanation_style=explanation_style_selected,
-                        llm=llm_studybuddy
+                        llm=llm_studybuddy2
                     )
                     st.markdown(f"### {explanation_style_selected} Explanation:")
                     st.markdown(explanation_text)
@@ -701,7 +701,7 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
                     length_instruction = {
                         "Short": "Provide a very brief, one-paragraph executive summary.",
                         "Medium": "Provide a multi-paragraph summary covering the main sections and key arguments.",
-                        "Detailed": "Provide a comprehensive and elaborative summary, breaking down complex topics and highlighting all major sections, arguments, examples, and conclusions found in the text."
+                        "Detailed": "Provide an elaborative summary, breaking down complex topics and highlighting all major sections, arguments, examples, and conclusions found in the text. Go over ALL concepts and ideas presented in the text"
                     }
                     prompt_template_summary = f"""
                     Based ONLY on the following text, {length_instruction[summary_length]}
