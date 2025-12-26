@@ -9,13 +9,13 @@ except KeyError:
     print("sqlite3 module already replaced or manipulated. Assuming pysqlite3-binary is in use if installed.")
 
 import streamlit as st
-import streamlit as st
 # LangChain imports for the Study Buddy section
 from langchain_google_genai import GoogleGenerativeAI as LangChainGoogleGenerativeAI
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
+from langchain_core.documents import Document # Import Document for manual creation
 from langchain.prompts import PromptTemplate
 # Standard Python imports
 import os
@@ -49,9 +49,9 @@ llm_studybuddy2 = None
 llm_qna = None
 embeddings_studybuddy = None
 try:
-    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=0.7, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
-    llm_studybuddy2 = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=1, google_api_key=GEMINI_API_KEY) 
-    llm_qna = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=0.7, google_api_key=GEMINI_API_KEY)
+    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.7, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
+    llm_studybuddy2 = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=1, google_api_key=GEMINI_API_KEY) 
+    llm_qna = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.7, google_api_key=GEMINI_API_KEY)
     embeddings_studybuddy = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", task_type="retrieval_document", google_api_key=GEMINI_API_KEY)
 except Exception as e:
     st.sidebar.error(f"Error initializing AI models: {e}")
@@ -99,7 +99,7 @@ def perform_ocr_with_gemini(pdf_file_uploader_object):
         )
         st.sidebar.write(f"File '{uploaded_gemini_file.display_name}' uploaded. URI: {uploaded_gemini_file.uri}. Mime Type: {pdf_file_uploader_object.type}")
         st.sidebar.write("Extracting text with AI...")
-        model_ocr = genai.GenerativeModel(model_name="gemini-3-flash-preview")
+        model_ocr = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
         prompt = [
             "Please perform OCR on the provided PDF document and extract all text content and format it in markdown, with bold headings and leave lines wherever required.",
             "Present the extracted text clearly. If there are multiple pages, try to indicate page breaks with something like '--- Page X ---' if possible, or just provide the continuous text.",
@@ -148,58 +148,105 @@ if st.session_state.ocr_text_output:
 # =============================================
 # SECTION 2: Study Buddy Q&A and Tools
 # =============================================
-# ... (File upload and processing logic remains the same) ...
 st.sidebar.markdown("---")
 st.sidebar.header("🧠 Study AI Tools")
-study_uploaded_file = st.sidebar.file_uploader(
-    "Upload TEXT-READABLE PDF or TXT for Q&A, Summary, etc.", 
-    type=["pdf", "txt"], 
-    key="study_uploader",
-    help="If your PDF is scanned, please use the 'OCR Scanned PDF' section above first and then upload the downloaded .txt file here."
-)
 
-if study_uploaded_file is not None and GEMINI_API_KEY and llm_studybuddy and embeddings_studybuddy:
-    file_bytes = study_uploaded_file.getvalue()
-    current_file_hash = hashlib.md5(file_bytes).hexdigest()
+# Tab selection for input method
+input_method = st.sidebar.radio("Input Method:", ["Upload File", "Paste Text"], horizontal=True)
+
+study_uploaded_file = None
+pasted_text_input = None
+processing_source_name = "your document" # Default name
+
+if input_method == "Upload File":
+    study_uploaded_file = st.sidebar.file_uploader(
+        "Upload TEXT-READABLE PDF or TXT", 
+        type=["pdf", "txt"], 
+        key="study_uploader",
+        help="If your PDF is scanned, please use the 'OCR Scanned PDF' section above first."
+    )
+    if study_uploaded_file:
+        processing_source_name = study_uploaded_file.name
+
+elif input_method == "Paste Text":
+    pasted_text_input = st.sidebar.text_area(
+        "Paste your study text here:", 
+        height=300, 
+        key="study_text_paste"
+    )
+    if pasted_text_input:
+        processing_source_name = "Pasted Text"
+
+# Check if we have valid input from either source
+has_input = (study_uploaded_file is not None) or (pasted_text_input is not None and pasted_text_input.strip() != "")
+
+if has_input and GEMINI_API_KEY and llm_studybuddy and embeddings_studybuddy:
+    
+    # Calculate hash based on input type
+    if study_uploaded_file:
+        file_bytes = study_uploaded_file.getvalue()
+        current_file_hash = hashlib.md5(file_bytes).hexdigest()
+    else:
+        # Use hash of pasted text
+        current_file_hash = hashlib.md5(pasted_text_input.encode('utf-8')).hexdigest()
 
     if current_file_hash != st.session_state.processed_file_hash:
-        st.sidebar.info(f"New file '{study_uploaded_file.name}' for Study AI. Processing...")
+        st.sidebar.info(f"Processing '{processing_source_name}' for Study AI...")
         st.session_state.vector_store = None
         st.session_state.documents_for_direct_use = None
         st.session_state.chat_history = [] 
         st.session_state.current_doc_chat_hash = current_file_hash 
         st.session_state.last_used_sources = []
-        st.session_state.mindmap_keywords_list = "" # Reset mindmap data for new file
+        st.session_state.mindmap_keywords_list = ""
         st.session_state.mindmap_json_canvas = ""
+        
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{study_uploaded_file.name.split('.')[-1]}") as tmp_file:
-                tmp_file.write(file_bytes)
-                tmp_file_path = tmp_file.name
-            if study_uploaded_file.type == "application/pdf":
-                loader = PyPDFLoader(tmp_file_path)
+            documents = []
+            
+            if study_uploaded_file:
+                # Handle File Upload
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{study_uploaded_file.name.split('.')[-1]}") as tmp_file:
+                    tmp_file.write(file_bytes)
+                    tmp_file_path = tmp_file.name
+                
+                if study_uploaded_file.type == "application/pdf":
+                    loader = PyPDFLoader(tmp_file_path)
+                else:
+                    loader = TextLoader(tmp_file_path, encoding='utf-8')
+                
+                documents = loader.load()
+                
+                # Check for empty PDF content
+                if study_uploaded_file.type == "application/pdf" and (not documents or not any(doc.page_content.strip() for doc in documents)):
+                    st.sidebar.error("Uploaded PDF has no extractable text. Use OCR section first.")
+                    os.remove(tmp_file_path)
+                    st.session_state.processed_file_hash = None
+                    # Stop further processing
+                    documents = []
+                
+                if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
+                    os.remove(tmp_file_path)
+
             else:
-                loader = TextLoader(tmp_file_path, encoding='utf-8')
-            documents = loader.load()
-            if study_uploaded_file.type == "application/pdf" and (not documents or not any(doc.page_content.strip() for doc in documents)):
-                st.sidebar.error("Uploaded PDF for Study AI has no extractable text. Use OCR section first for scanned PDFs.")
-                os.remove(tmp_file_path)
-                st.session_state.processed_file_hash = None
-            else:
+                # Handle Pasted Text - Create Document object manually
+                documents = [Document(page_content=pasted_text_input, metadata={"source": "Pasted Text"})]
+
+            if documents:
                 st.session_state.documents_for_direct_use = documents
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
                 texts = text_splitter.split_documents(documents)
                 valid_texts = [text for text in texts if text.page_content and text.page_content.strip()]
+                
                 if not valid_texts:
                     st.sidebar.error("No valid text chunks after splitting for Study Buddy.")
                 else:
                     with st.spinner("Creating embeddings for Study AI..."):
                         st.session_state.vector_store = Chroma.from_documents(documents=valid_texts, embedding=embeddings_studybuddy)
                     st.session_state.processed_file_hash = current_file_hash
-                    st.sidebar.success(f"✅ '{study_uploaded_file.name}' ready for Study AI!")
-            if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
-                os.remove(tmp_file_path)
+                    st.sidebar.success(f"✅ '{processing_source_name}' ready for Study AI!")
+
         except Exception as e:
-            st.sidebar.error(f"Error processing Study AI file: {e}")
+            st.sidebar.error(f"Error processing Study AI content: {e}")
             if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
             st.session_state.vector_store = None
             st.session_state.documents_for_direct_use = None
@@ -419,9 +466,13 @@ if st.session_state.get('vector_store') and st.session_state.get('documents_for_
         st.session_state.mindmap_json_canvas = ""
         
     header_file_name = "your document"
+    # Logic to handle naming when input is pasted text vs file
     if study_uploaded_file and hasattr(study_uploaded_file, 'name'):
         if st.session_state.processed_file_hash == hashlib.md5(study_uploaded_file.getvalue()).hexdigest():
             header_file_name = study_uploaded_file.name
+    elif pasted_text_input:
+        if st.session_state.processed_file_hash == hashlib.md5(pasted_text_input.encode('utf-8')).hexdigest():
+            header_file_name = "Pasted Text"
             
     st.header(f"🛠️ Study Tools for: {header_file_name}")
     
