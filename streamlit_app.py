@@ -52,7 +52,7 @@ try:
     llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=0.7, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
     llm_studybuddy2 = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=1, google_api_key=GEMINI_API_KEY) 
     llm_qna = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=0.7, google_api_key=GEMINI_API_KEY)
-    embeddings_studybuddy = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", task_type="retrieval_document", google_api_key=GEMINI_API_KEY)
+    embeddings_studybuddy = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", task_type="retrieval_document", google_api_key=GEMINI_API_KEY)
 except Exception as e:
     st.sidebar.error(f"Error initializing AI models: {e}")
 
