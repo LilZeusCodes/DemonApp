@@ -49,9 +49,9 @@ llm_studybuddy2 = None
 llm_qna = None
 embeddings_studybuddy = None
 try:
-    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.7, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
-    llm_studybuddy2 = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=1, google_api_key=GEMINI_API_KEY) 
-    llm_qna = LangChainGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.7, google_api_key=GEMINI_API_KEY)
+    llm_studybuddy = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=0.7, google_api_key=GEMINI_API_KEY) # Lower temp for structured output
+    llm_studybuddy2 = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=1, google_api_key=GEMINI_API_KEY) 
+    llm_qna = LangChainGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=0.7, google_api_key=GEMINI_API_KEY)
     embeddings_studybuddy = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", task_type="retrieval_document", google_api_key=GEMINI_API_KEY)
 except Exception as e:
     st.sidebar.error(f"Error initializing AI models: {e}")
@@ -99,7 +99,7 @@ def perform_ocr_with_gemini(pdf_file_uploader_object):
         )
         st.sidebar.write(f"File '{uploaded_gemini_file.display_name}' uploaded. URI: {uploaded_gemini_file.uri}. Mime Type: {pdf_file_uploader_object.type}")
         st.sidebar.write("Extracting text with AI...")
-        model_ocr = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
+        model_ocr = genai.GenerativeModel(model_name="gemini-3-flash-preview")
         prompt = [
             "Please perform OCR on the provided PDF document and extract all text content and format it in markdown, with bold headings and leave lines wherever required.",
             "Present the extracted text clearly. If there are multiple pages, try to indicate page breaks with something like '--- Page X ---' if possible, or just provide the continuous text.",
